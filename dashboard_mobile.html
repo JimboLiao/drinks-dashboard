@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>分店儀表板｜飲料庫存＋便當/點心回報</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --card:#121831;
+      --muted:#8da2b8;
+      --text:#edf2ff;
+      --ok:#17b26a;
+      --ng:#ef4444;
+      --pending:#f59e0b;
+      --chip:#1e293b;
+      --accent:#38bdf8;
+      --grid-gap:12px;
+      --radius:16px;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans TC",Arial,"Apple Color Emoji","Segoe UI Emoji";overflow-x:hidden;}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(11,16,32,.95),rgba(11,16,32,.75));backdrop-filter:saturate(120%) blur(6px);}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+    h1{font-size:1.25rem;margin:0 0 8px;}
+    .sub{color:var(--muted);font-size:.9rem}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    .btn{background:var(--accent);color:#000;font-weight:700;border:0;padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .meta{color:var(--muted);font-size:.85rem}
+    .meta strong{color:#fff}
+
+    section{margin:18px 0 10px}
+    section > h2{font-size:1.1rem;margin:0 0 10px}
+
+    .grid{display:grid;grid-template-columns:1fr;gap:var(--grid-gap);}
+    @media (min-width:700px){
+      .grid.md-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));}
+      .grid.md-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+      .grid.md-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+    }
+
+    .card{background:var(--card);border:1px solid #1f2a46;border-radius:var(--radius);padding:12px;min-width:0;}
+    .card h3{margin:0 0 6px;font-size:1rem;word-break:break-word;}
+    .muted{color:var(--muted);font-size:.85rem}
+
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--chip);font-size:.85rem;white-space:nowrap}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.ok{background:var(--ok)}
+    .dot.ng{background:var(--ng)}
+    .dot.pending{background:var(--pending)}
+
+    .kv{display:flex;gap:10px;flex-wrap:wrap}
+    .kv .box{background:#0f152b;border:1px solid #1f2a46;border-radius:12px;padding:8px 10px;flex:1;min-width:100px}
+    .kv .label{color:var(--muted);font-size:.8rem}
+    .kv .val{font-size:1.1rem;font-weight:700;word-break:break-word}
+
+    .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+    .legend .l{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.8rem}
+    .swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+    .footer{color:var(--muted);font-size:.8rem;margin:28px 0;text-align:center}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>分店儀表板</h1>
+      <div class="sub">顯示飲料庫存、便當與點心的葷/素回報狀態</div>
+      <div class="toolbar">
+        <button id="syncBtn" class="btn">手動同步</button>
+        <div class="meta">上次同步：<strong id="lastSync">尚未同步</strong></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="app">
+    <section id="drinksSection">
+      <h2>飲料庫存</h2>
+      <div class="legend" id="drinkLegend"></div>
+      <div class="grid md-2" id="chartsGrid"><!-- charts here --></div>
+    </section>
+
+    <section id="bentoSection">
+      <h2>便當回報狀態</h2>
+      <div class="grid md-4" id="bentoGrid"><!-- cards here --></div>
+    </section>
+
+    <section id="snackSection">
+      <h2>點心回報狀態</h2>
+      <div class="grid md-4" id="snackGrid"><!-- cards here --></div>
+    </section>
+
+    <div class="footer">狀態：<span style="color:var(--ok)">ok 正常</span> ｜ <span style="color:var(--ng)">含 ng 文字 ⇒ 異常</span> ｜ 其他為 <span style="color:var(--pending)">待回報/未知</span></div>
+  </main>
+
+  <script>
+    // === 可調整：你的資料 Webhook ===
+    // 期望回傳 JSON 結構：
+    // { "drinks":[...4款...], "sites":[ {"site":"...","drinks_qty":[...4數值...],"bento":{...},"snack":{...}} ...] }
+    const WEBHOOK_URL = "https://hook.us1.make.com/6tilmdqm5zusyoft716qaw3prky3xeji"; // ← 將這裡替換為實際的資料端點
+
+    const stateClass = (s)=>{
+      if(!s||typeof s!== 'string') return 'pending';
+      const t = s.trim().toLowerCase();
+      if(t==='ok') return 'ok';
+      if(t.includes('ng')) return 'ng';
+      return 'pending';
+    };
+
+    const palette = [
+      '#60a5fa', // 無糖紅茶
+      '#f472b6', // 奶茶
+      '#f59e0b', // 蘋果汁
+      '#34d399'  // 甘蔗青茶
+    ];
+
+    let chartRefs = [];
+
+    function clearCharts(){
+      // 更徹底的清理機制
+      chartRefs.forEach((c,index)=>{
+        try{
+          if(c && typeof c.destroy === 'function'){
+            c.destroy();
+          }
+        }catch(e){
+          console.warn(`清理圖表 ${index} 時發生錯誤:`, e);
+        }
+      });
+      chartRefs = [];
+      
+      // 額外等待一個事件循環，確保 Chart.js 完全清理
+      return new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    function createLegend(drinks){
+      const el = document.getElementById('drinkLegend');
+      el.innerHTML = '';
+      (drinks||[]).forEach((d,i)=>{
+        const span = document.createElement('div');
+        span.className = 'l';
+        span.innerHTML = `<span class="swatch" style="background:${palette[i%palette.length]}"></span>${d}`;
+        el.appendChild(span);
+      });
+    }
+
+    async function render(data){
+      if(!data || !Array.isArray(data.sites)) return;
+      
+      // 先清理舊圖表，並等待清理完成
+      await clearCharts();
+      
+      // 飲料圖表
+      const chartsGrid = document.getElementById('chartsGrid');
+      chartsGrid.innerHTML = '';
+      createLegend(data.drinks||[]);
+
+      // 使用 setTimeout 確保 DOM 更新完成後再創建新圖表
+      setTimeout(() => {
+        data.sites.forEach((s,idx)=>{
+          const card = document.createElement('div');
+          card.className = 'card';
+          const canvasId = `chart_canvas_${idx}_${Date.now()}`; // 使用時間戳確保唯一性
+          card.innerHTML = `
+            <div class="row"><h3>${s.site||'未命名店'}</h3><span class="muted">飲料庫存</span></div>
+            <div style="position:relative;height:200px;width:100%;">
+              <canvas id="${canvasId}"></canvas>
+            </div>
+          `;
+          chartsGrid.appendChild(card);
+          
+          // 等待 DOM 插入後再創建圖表
+          setTimeout(() => {
+            const canvas = document.getElementById(canvasId);
+            if(!canvas) {
+              console.error(`找不到 canvas: ${canvasId}`);
+              return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const labels = (data.drinks&&data.drinks.length=== (s.drinks_qty||[]).length)? data.drinks : (data.drinks||['A','B','C','D']);
+            const qty = (s.drinks_qty||[]).map(Number);
+            const barColors = labels.map((_,i)=>palette[i%palette.length]);
+            
+            const c = new Chart(ctx,{
+              type:'bar',
+              data:{ 
+                labels, 
+                datasets:[{ 
+                  label: '數量', 
+                  data: qty, 
+                  backgroundColor: barColors 
+                }]
+              },
+              options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{ 
+                  legend:{ display:false }, 
+                  tooltip:{ mode:'index', intersect:false }
+                },
+                scales:{
+                  x:{ 
+                    ticks:{ color:'#b8c2d9' }, 
+                    grid:{ color:'rgba(184,194,217,.12)'} 
+                  },
+                  y:{ 
+                    beginAtZero:true, 
+                    ticks:{ color:'#b8c2d9' }, 
+                    grid:{ color:'rgba(184,194,217,.12)'} 
+                  }
+                },
+                // 新增：防止圖表尺寸問題
+                onResize: function(chart, size) {
+                  chart.resize();
+                }
+              }
+            });
+            chartRefs.push(c);
+          }, 50); // 延遲 50ms 確保 DOM 準備就緒
+        });
+      }, 20);
+
+      // 便當 / 點心 卡片
+      const bentoGrid = document.getElementById('bentoGrid');
+      const snackGrid = document.getElementById('snackGrid');
+      bentoGrid.innerHTML = '';
+      snackGrid.innerHTML = '';
+
+      data.sites.forEach(s=>{
+        const bms = stateClass(s?.bento?.state?.meat);
+        const bvs = stateClass(s?.bento?.state?.veg);
+        const sms = stateClass(s?.snack?.state?.meat);
+        const svs = stateClass(s?.snack?.state?.veg);
+
+        const bentoCard = document.createElement('div');
+        bentoCard.className = 'card';
+        bentoCard.innerHTML = `
+          <div class="row">
+            <h3>${s.site}</h3>
+            <div class="chips">
+              <span class="chip"><span class="dot ${bms}"></span> 葷：${s?.bento?.state?.meat ?? '—'}</span>
+              <span class="chip"><span class="dot ${bvs}"></span> 素：${s?.bento?.state?.veg ?? '—'}</span>
+            </div>
+          </div>
+          <div class="kv" style="margin-top:8px">
+            <div class="box"><div class="label">葷份數</div><div class="val">${Number(s?.bento?.meat ?? 0)}</div></div>
+            <div class="box"><div class="label">素份數</div><div class="val">${Number(s?.bento?.veg ?? 0)}</div></div>
+          </div>
+        `;
+        bentoGrid.appendChild(bentoCard);
+
+        const snackCard = document.createElement('div');
+        snackCard.className = 'card';
+        snackCard.innerHTML = `
+          <div class="row">
+            <h3>${s.site}</h3>
+            <div class="chips">
+              <span class="chip"><span class="dot ${sms}"></span> 葷：${s?.snack?.state?.meat ?? '—'}</span>
+              <span class="chip"><span class="dot ${svs}"></span> 素：${s?.snack?.state?.veg ?? '—'}</span>
+            </div>
+          </div>
+          <div class="kv" style="margin-top:8px">
+            <div class="box"><div class="label">葷份數</div><div class="val">${Number(s?.snack?.meat ?? 0)}</div></div>
+            <div class="box"><div class="label">素份數</div><div class="val">${Number(s?.snack?.veg ?? 0)}</div></div>
+          </div>
+        `;
+        snackGrid.appendChild(snackCard);
+      });
+    }
+
+    async function syncData(){
+      const btn=document.getElementById('syncBtn');
+      const last=document.getElementById('lastSync');
+      const orig=btn.textContent;
+      try{
+        btn.disabled=true; btn.textContent='同步中...';
+        const url=new URL(WEBHOOK_URL,location.origin);
+        const q=new URLSearchParams(location.search);
+        if(q.has('lineId')) url.searchParams.set('lineId',q.get('lineId'));
+        const resp=await fetch(url.toString(),{cache:'no-store'});
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        const data=await resp.json();
+        render(data);
+        last.textContent=new Date().toLocaleString();
+        last.style.color='';
+      }catch(err){
+        console.error(err);
+        last.textContent='同步失敗';
+        last.style.color='#ef4444';
+        alert('同步失敗：'+(err?.message||err));
+      }finally{
+        btn.disabled=false; btn.textContent=orig;
+      }
+    }
+
+    document.getElementById('syncBtn').addEventListener('click', syncData);
+
+    // 初次載入即同步
+    syncData();
+  </script>
+</body>
+</html>
