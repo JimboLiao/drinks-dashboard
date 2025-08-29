@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>飲料庫存儀表板</title>
+  <style>
+    :root{
+      --bg: #f6f7fb;
+      --fg: #111827;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --ring: rgba(99,102,241,.25);
+      --shadow: 0 8px 24px rgba(0,0,0,.08);
+      --radius: 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root{
+        --bg: #0b0e14;
+        --fg: #e5e7eb;
+        --card: #131823;
+        --muted: #9aa0aa;
+        --shadow: 0 8px 24px rgba(0,0,0,.35);
+      }
+    }
+    *{ box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+                   Roboto, "Helvetica Neue", Arial, "Noto Sans",
+                   "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+      line-height: 1.6;
+      background: radial-gradient(1200px 600px at 10% -10%, rgba(99,102,241,.15), transparent 60%),
+                  radial-gradient(1200px 600px at 110% 10%, rgba(20,184,166,.12), transparent 60%),
+                  var(--bg);
+      color: var(--fg);
+    }
+    header{
+      padding: clamp(16px, 3vw, 32px) 16px 0;
+      text-align: center;
+    }
+    h1{
+      margin: 0 auto;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      font-size: clamp(20px, 4vw, 32px);
+    }
+    .subtitle{
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .container{
+      max-width: min(980px, 92vw);
+      margin: 18px auto 32px;
+      padding: 0 12px 24px;
+    }
+    .card{
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(125,125,125,.12);
+      padding: clamp(10px, 2.5vw, 20px);
+      transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+    }
+    .card:focus-within{
+      outline: none;
+      border-color: rgba(99,102,241,.35);
+      box-shadow: 0 0 0 6px var(--ring), var(--shadow);
+    }
+    .iframe-wrap{
+      width: 100%;
+      /* 將原始 584x371 轉為相同比例的自適應框 */
+      aspect-ratio: 584 / 371;
+      border-radius: calc(var(--radius) - 4px);
+      overflow: hidden;
+      background: rgba(125,125,125,.08);
+    }
+    .iframe-wrap iframe{
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .meta{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .9rem;
+      flex-wrap: wrap;
+    }
+    .pill{
+      padding: 4px 10px;
+      background: rgba(99,102,241,.12);
+      border: 1px solid rgba(99,102,241,.22);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>飲料庫存儀表板</h1>
+    <div class="subtitle">即時嵌入自 Google 試算表的互動圖表</div>
+  </header>
+
+  <main class="container">
+    <section class="card" tabindex="0" aria-label="飲料庫存互動圖表">
+      <div class="iframe-wrap">
+        <iframe
+          width="584"
+          height="371"
+          seamless
+          frameborder="0"
+          scrolling="no"
+          src="https://docs.google.com/spreadsheets/d/e/2PACX-1vT72gXSzgNfDUmzACRqbHTDgi7W45LskX4-KkhtTLoW5pXLsa5BCvZ3fH_eofgSUlr0_z9NAAd7l7wH/pubchart?oid=1232215145&amp;format=interactive"
+          title="飲料庫存圖表"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          allowfullscreen>
+        </iframe>
+      </div>
+
+      <div class="meta" role="note" aria-label="圖表資訊">
+        <span class="pill">來源：Google 試算表已發佈圖表</span>
+        <span>如需最佳體驗，建議於橫向觀看</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
